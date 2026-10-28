@@ -517,6 +517,10 @@ CONFIG_CRYPTO_TWOFISH=y
 # CONFIG_CRYPTO_HW is not set
 CONFIG_CRC8=y
 
+# KernelSU-Next (built-in, manual hook)
+CONFIG_KSU=y
+CONFIG_KSU_MANUAL_HOOK=y
+
 # [cannon][A17] 取证：卡死时 dump 全部阻塞任务并 panic，pstore 保存
 CONFIG_DEBUG_KERNEL=y
 CONFIG_DETECT_HUNG_TASK=y
