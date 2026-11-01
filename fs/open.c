@@ -1209,6 +1209,19 @@ SYSCALL_DEFINE1(close, unsigned int, fd)
 EXPORT_SYMBOL(sys_close);
 
 /*
+ * close_range(2) backport (Linux 5.9) with the CLOSE_RANGE_CLOEXEC flag
+ * (Linux 5.11). Android bionic implements posix_spawn(POSIX_SPAWN_CLOEXEC_DEFAULT)
+ * by calling close_range(3, ~0U, CLOSE_RANGE_CLOEXEC) in the vfork child; a
+ * kernel without this syscall returns -ENOSYS, so the child _exit(127)s before
+ * execve and every such spawn (e.g. netd -> dnsmasq) dies silently.
+ */
+SYSCALL_DEFINE3(close_range, unsigned int, fd, unsigned int, max_fd,
+		unsigned int, flags)
+{
+	return __close_range(fd, max_fd, flags);
+}
+
+/*
  * This routine simulates a hangup on the tty, to arrange that users
  * are given clean terminals at login time.
  */
