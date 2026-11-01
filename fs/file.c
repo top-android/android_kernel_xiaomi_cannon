@@ -18,6 +18,8 @@
 #include <linux/vmalloc.h>
 #include <linux/file.h>
 #include <linux/fdtable.h>
+#include <linux/bitmap.h>
+#include <uapi/linux/close_range.h>
 #include <linux/bitops.h>
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
@@ -643,6 +645,61 @@ out_unlock:
 	spin_unlock(&files->file_lock);
 	return -EBADF;
 }
+
+/*
+ * __close_range - close or set close-on-exec on a range of file descriptors.
+ *
+ * Backport of Linux 5.9 close_range(2) plus the Linux 5.11 CLOSE_RANGE_CLOEXEC
+ * flag, for this 4.14 Android kernel. Android 16 bionic requires CLOSE_RANGE_CLOEXEC
+ * to implement posix_spawn(POSIX_SPAWN_CLOEXEC_DEFAULT); the vfork child calls
+ * close_range(3, ~0U, CLOSE_RANGE_CLOEXEC) before execve. Without the syscall it
+ * gets -ENOSYS and _exit(127)s without ever exec'ing, so every CLOEXEC_DEFAULT
+ * spawn (e.g. netd -> dnsmasq) dies silently.
+ *
+ * CLOSE_RANGE_UNSHARE is intentionally NOT implemented (returns -EINVAL): no
+ * component on this tree relies on it, and it needs fdtable unsharing machinery
+ * that does not exist in 4.14.
+ */
+int __close_range(unsigned int fd, unsigned int max_fd, unsigned int flags)
+{
+	struct files_struct *files = current->files;
+	struct fdtable *fdt;
+	unsigned int cur_max;
+
+	if (flags & ~(CLOSE_RANGE_UNSHARE | CLOSE_RANGE_CLOEXEC))
+		return -EINVAL;
+	if (fd > max_fd)
+		return -EINVAL;
+	if (flags & CLOSE_RANGE_UNSHARE)
+		return -EINVAL;
+
+	/* cap the requested range to the current (RCU-stable) fd table size */
+	rcu_read_lock();
+	cur_max = files_fdtable(files)->max_fds;
+	rcu_read_unlock();
+	if (cur_max == 0)
+		return 0;
+	if (max_fd >= cur_max)
+		max_fd = cur_max - 1;
+	if (max_fd < fd)
+		return 0;
+
+	if (flags & CLOSE_RANGE_CLOEXEC) {
+		rcu_read_lock();
+		fdt = files_fdtable(files);
+		/* fd <= max_fd < cur_max <= fdt->max_fds: range is in-bounds */
+		bitmap_set(fdt->close_on_exec, fd, max_fd - fd + 1);
+		rcu_read_unlock();
+	} else {
+		unsigned int i;
+
+		/* __close_fd re-checks the range and takes file_lock per fd */
+		for (i = fd; i <= max_fd; i++)
+			__close_fd(files, i);
+	}
+	return 0;
+}
+EXPORT_SYMBOL(__close_range);
 
 void do_close_on_exec(struct files_struct *files)
 {
