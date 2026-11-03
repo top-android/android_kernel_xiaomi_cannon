@@ -995,6 +995,10 @@ KBUILD_CFLAGS   += $(call cc-option,-Werror=incompatible-pointer-types)
 # Require designated initializers for all marked structures
 KBUILD_CFLAGS   += $(call cc-option,-Werror=designated-init)
 KBUILD_CFLAGS += -Wno-int-conversion -Wno-strict-prototypes -Wno-single-bit-bitfield-constant-conversion
+# Newer clang flags const objects declared without an initializer (e.g. the
+# typecheck() idiom inside u64_to_user_ptr() when passed a 'const u64').
+# Vendor/mediatek code trips this; suppress it when supported.
+KBUILD_CFLAGS += $(call cc-option,-Wno-default-const-init-var-unsafe)
 
 # change __FILE__ to the relative path from the srctree
 KBUILD_CFLAGS	+= $(call cc-option,-fmacro-prefix-map=$(srctree)/=)
