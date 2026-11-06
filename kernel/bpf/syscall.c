@@ -1109,30 +1109,13 @@ EXPORT_SYMBOL_GPL(bpf_prog_get_type);
 /* last field in 'union bpf_attr' used by this command */
 #define	BPF_PROG_LOAD_LAST_FIELD expected_attach_type
 
-static int bpf_prog_load_real(union bpf_attr *attr);
-
-/* [cannon][A17·4.14] 调试埋点：PROG_LOAD 入参与返回值 */
 static int bpf_prog_load(union bpf_attr *attr)
-{
-	int r = bpf_prog_load_real(attr);
-	if (r)
-		pr_err("cannon-bpf: PROG_LOAD type=%u attach=%u flags=%u kver=%u -> %d\n",
-		       attr->prog_type, attr->expected_attach_type,
-		       attr->prog_flags, attr->kern_version, r);
-	return r;
-}
-
-static int bpf_prog_load_real(union bpf_attr *attr)
 {
 	enum bpf_prog_type type = attr->prog_type;
 	struct bpf_prog *prog;
 	int err;
 	char license[128];
 	bool is_gpl;
-
-	pr_err("cannon-bpf: PROG_LOAD type=%u attach=%u flags=%u kver=%u insn_cnt=%u log_level=%u\n",
-	       attr->prog_type, attr->expected_attach_type, attr->prog_flags,
-	       attr->kern_version, attr->insn_cnt, attr->log_level);
 
 	if (CHECK_ATTR(BPF_PROG_LOAD))
 		return -EINVAL;
@@ -1167,12 +1150,10 @@ static int bpf_prog_load_real(union bpf_attr *attr)
 		return -ENOMEM;
 
 	err = security_bpf_prog_alloc(prog->aux);
-	pr_err("cannon-bpf: step security_bpf_prog_alloc err=%d\n", err);
 	if (err)
 		goto free_prog_nouncharge;
 
 	err = bpf_prog_charge_memlock(prog);
-	pr_err("cannon-bpf: step charge_memlock err=%d\n", err);
 	if (err)
 		goto free_prog_sec;
 
@@ -1200,7 +1181,6 @@ static int bpf_prog_load_real(union bpf_attr *attr)
 
 	/* run eBPF verifier */
 	err = bpf_check(&prog, attr);
-	pr_err("cannon-bpf: step bpf_check err=%d\n", err);
 	if (err < 0)
 		goto free_used_maps;
 
