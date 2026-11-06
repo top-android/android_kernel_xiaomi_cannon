@@ -509,9 +509,91 @@ out:
 	kfree(trie);
 }
 
-static int trie_get_next_key(struct bpf_map *map, void *key, void *next_key)
+/* [cannon][A17·4.14] backport 自 4.16 commit b47125c9ed10：
+ * 原生 4.14 的空壳只返回 -ENOTSUPP(524)，A17 的 BpfMap.getFirstKey 对
+ * LPM_TRIE 遍历依赖此实现 */
+static int trie_get_next_key(struct bpf_map *map, void *_key, void *_next_key)
 {
-	return -ENOTSUPP;
+	struct lpm_trie_node *node, *next_node = NULL, *parent, *search_root;
+	struct lpm_trie *trie = container_of(map, struct lpm_trie, map);
+	struct bpf_lpm_trie_key *key = _key, *next_key = _next_key;
+	struct lpm_trie_node **node_stack = NULL;
+	int err = 0, stack_ptr = -1;
+	unsigned int next_bit;
+	size_t matchlen = 0;
+
+	/* Empty trie */
+	search_root = rcu_dereference(trie->root);
+	if (!search_root)
+		return -ENOENT;
+
+	/* For invalid key, find the leftmost node in the trie */
+	if (!key || key->prefixlen > trie->max_prefixlen)
+		goto find_leftmost;
+
+	node_stack = kmalloc_array(trie->max_prefixlen + 1,
+				   sizeof(struct lpm_trie_node *),
+				   GFP_ATOMIC | __GFP_NOWARN);
+	if (!node_stack)
+		return -ENOMEM;
+
+	/* Try to find the exact node for the given key */
+	for (node = search_root; node;) {
+		node_stack[++stack_ptr] = node;
+		matchlen = longest_prefix_match(trie, node, key);
+		if (node->prefixlen != matchlen ||
+		    node->prefixlen == key->prefixlen)
+			break;
+
+		next_bit = extract_bit(key->data, node->prefixlen);
+		node = rcu_dereference(node->child[next_bit]);
+	}
+	if (!node || node->prefixlen != matchlen ||
+	    (node->flags & LPM_TREE_NODE_FLAG_IM))
+		goto find_leftmost;
+
+	/* The node with the exactly-matching key has been found,
+	 * find the first node in postorder after the matched node.
+	 */
+	node = node_stack[stack_ptr];
+	while (stack_ptr > 0) {
+		parent = node_stack[stack_ptr - 1];
+		if (rcu_dereference(parent->child[0]) == node) {
+			search_root = rcu_dereference(parent->child[1]);
+			if (search_root)
+				goto find_leftmost;
+		}
+		if (!(parent->flags & LPM_TREE_NODE_FLAG_IM)) {
+			next_node = parent;
+			goto do_copy;
+		}
+
+		node = parent;
+		stack_ptr--;
+	}
+
+	/* did not find anything */
+	err = -ENOENT;
+	goto free_stack;
+
+find_leftmost:
+	for (node = search_root; node;) {
+		if (node->flags & LPM_TREE_NODE_FLAG_IM) {
+			node = rcu_dereference(node->child[0]);
+		} else {
+			next_node = node;
+			node = rcu_dereference(node->child[0]);
+			if (!node)
+				node = rcu_dereference(next_node->child[1]);
+		}
+	}
+do_copy:
+	next_key->prefixlen = next_node->prefixlen;
+	memcpy((void *)next_key + offsetof(struct bpf_lpm_trie_key, data),
+	       next_node->data, trie->data_size);
+free_stack:
+	kfree(node_stack);
+	return err;
 }
 
 const struct bpf_map_ops trie_map_ops = {
