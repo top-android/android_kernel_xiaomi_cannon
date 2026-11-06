@@ -840,6 +840,15 @@ enum bpf_adj_room_mode {
 /* user accessible mirror of in-kernel sk_buff.
  * new fields can only be added to the end of this structure
  */
+#define __bpf_md_ptr(type, name)	\
+union {					\
+	type name;			\
+	__u64 name##_u64;		\
+}
+
+struct bpf_flow_keys;
+struct bpf_sock;
+
 struct __sk_buff {
 	__u32 len;
 	__u32 pkt_type;
@@ -868,6 +877,20 @@ struct __sk_buff {
 	__u32 local_ip6[4];	/* Stored in network byte order */
 	__u32 remote_port;	/* Stored in network byte order */
 	__u32 local_port;	/* stored in host byte order */
+	/* [cannon][A17·4.14] 以下字段对齐 bionic uapi 布局：
+	 * data_meta=140 flow_keys=144 tstamp=152 wire_len=160 gso_segs=164
+	 * sk=168 gso_size=176 —— A17 的 BPF 程序（tethering APEX）按这套
+	 * 偏移访问 ctx，内核结构体必须一一对应，否则 check_ctx_access 拒绝 */
+	__u32 data_meta;
+	__bpf_md_ptr(struct bpf_flow_keys *, flow_keys);
+	__u64 tstamp;
+	__u32 wire_len;
+	__u32 gso_segs;
+	__bpf_md_ptr(struct bpf_sock *, sk);
+	__u32 gso_size;
+	__u8 tstamp_type;
+	__u32 : 24;
+	__u64 hwtstamp;
 };
 
 struct bpf_tunnel_key {
@@ -975,6 +998,20 @@ struct bpf_sock_ops {
 	__u32 local_ip6[4];	/* Stored in network byte order */
 	__u32 remote_port;	/* Stored in network byte order */
 	__u32 local_port;	/* stored in host byte order */
+	/* [cannon][A17·4.14] 以下字段对齐 bionic uapi 布局：
+	 * data_meta=140 flow_keys=144 tstamp=152 wire_len=160 gso_segs=164
+	 * sk=168 gso_size=176 —— A17 的 BPF 程序（tethering APEX）按这套
+	 * 偏移访问 ctx，内核结构体必须一一对应，否则 check_ctx_access 拒绝 */
+	__u32 data_meta;
+	__bpf_md_ptr(struct bpf_flow_keys *, flow_keys);
+	__u64 tstamp;
+	__u32 wire_len;
+	__u32 gso_segs;
+	__bpf_md_ptr(struct bpf_sock *, sk);
+	__u32 gso_size;
+	__u8 tstamp_type;
+	__u32 : 24;
+	__u64 hwtstamp;
 };
 
 /* List of known BPF sock_ops operators.
