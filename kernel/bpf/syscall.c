@@ -1109,7 +1109,20 @@ EXPORT_SYMBOL_GPL(bpf_prog_get_type);
 /* last field in 'union bpf_attr' used by this command */
 #define	BPF_PROG_LOAD_LAST_FIELD expected_attach_type
 
+static int bpf_prog_load_real(union bpf_attr *attr);
+
+/* [cannon][A17·4.14] 调试：包一层打印每次 PROG_LOAD 的返回值 */
 static int bpf_prog_load(union bpf_attr *attr)
+{
+	int r = bpf_prog_load_real(attr);
+	if (r)
+		pr_err("cannon-bpf: PROG_LOAD type=%u attach=%u flags=%u kver=%u -> %d\n",
+		       attr->prog_type, attr->expected_attach_type,
+		       attr->prog_flags, attr->kern_version, r);
+	return r;
+}
+
+static int bpf_prog_load_real(union bpf_attr *attr)
 {
 	enum bpf_prog_type type = attr->prog_type;
 	struct bpf_prog *prog;
@@ -1117,37 +1130,45 @@ static int bpf_prog_load(union bpf_attr *attr)
 	char license[128];
 	bool is_gpl;
 
-	if (CHECK_ATTR(BPF_PROG_LOAD))
-		return -EINVAL;
+	pr_err("cannon-bpf: PROG_LOAD type=%u attach=%u flags=%u kver=%u insn_cnt=%u log_level=%u\n",
+	       attr->prog_type, attr->expected_attach_type, attr->prog_flags,
+	       attr->kern_version, attr->insn_cnt, attr->log_level);
+	if (CHECK_ATTR(BPF_PROG_LOAD)) {
+		pr_err("cannon-bpf: EINVAL at %s:%d\n", __func__, __LINE__);
+		return { pr_err("cannon-bpf: PROG_LOAD early fail at %s:%d\n", __func__, __LINE__); return -EINVAL; }
+	}
 
-	if (attr->prog_flags & ~BPF_F_STRICT_ALIGNMENT)
-		return -EINVAL;
+	if (attr->prog_flags & ~BPF_F_STRICT_ALIGNMENT) {
+		pr_err("cannon-bpf: EINVAL at %s:%d (prog_flags %u)\n",
+		       __func__, __LINE__, attr->prog_flags);
+		return { pr_err("cannon-bpf: PROG_LOAD early fail at %s:%d\n", __func__, __LINE__); return -EINVAL; }
+	}
 
 	/* copy eBPF program license from user space */
 	if (strncpy_from_user(license, u64_to_user_ptr(attr->license),
 			      sizeof(license) - 1) < 0)
-		return -EFAULT;
+		return { pr_err("cannon-bpf: PROG_LOAD early fail at %s:%d\n", __func__, __LINE__); return -EFAULT; }
 	license[sizeof(license) - 1] = 0;
 
 	/* eBPF programs must be GPL compatible to use GPL-ed functions */
 	is_gpl = license_is_gpl_compatible(license);
 
 	if (attr->insn_cnt == 0 || attr->insn_cnt > BPF_MAXINSNS)
-		return -E2BIG;
+		return { pr_err("cannon-bpf: PROG_LOAD early fail at %s:%d\n", __func__, __LINE__); return -E2BIG; }
 
 	if (type == BPF_PROG_TYPE_KPROBE &&
 	    attr->kern_version != LINUX_VERSION_CODE)
-		return -EINVAL;
+		return { pr_err("cannon-bpf: PROG_LOAD early fail at %s:%d\n", __func__, __LINE__); return -EINVAL; }
 
 	if (type != BPF_PROG_TYPE_SOCKET_FILTER &&
 	    type != BPF_PROG_TYPE_CGROUP_SKB &&
 	    !capable(CAP_SYS_ADMIN))
-		return -EPERM;
+		return { pr_err("cannon-bpf: PROG_LOAD early fail at %s:%d\n", __func__, __LINE__); return -EPERM; }
 
 	/* plain bpf_prog allocation */
 	prog = bpf_prog_alloc(bpf_prog_size(attr->insn_cnt), GFP_USER);
 	if (!prog)
-		return -ENOMEM;
+		return { pr_err("cannon-bpf: PROG_LOAD early fail at %s:%d\n", __func__, __LINE__); return -ENOMEM; }
 
 	err = security_bpf_prog_alloc(prog->aux);
 	if (err)
