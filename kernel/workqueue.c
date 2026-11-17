@@ -2926,7 +2926,12 @@ bool flush_work(struct work_struct *work)
 	if (WARN_ON(!wq_online))
 		return false;
 
-	if (WARN_ON(!work->func))
+	/*
+	 * cannon: dm/blk-mq 销毁路径（apexd -> dm_destroy -> blk_cleanup_queue ->
+	 * cancel_work_sync）会对已经清掉 func 的 work 调 flush，4.14 上每次关机
+	 * 刷 30+ 条 WARNING 挤占 pstore。已经销毁的 work 直接当 idle 处理。
+	 */
+	if (!work->func)
 		return false;
 
 	lock_map_acquire(&work->lockdep_map);
