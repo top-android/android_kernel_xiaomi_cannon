@@ -4859,7 +4859,10 @@ page_owner=on loop.max_part=7";
 		mediatek,smi-id = <8>;
 	};
 
-	venc@17020000 {
+	/* cannon: 这节点与前面的 venc@17000000（reg 0x17020000）生成同一个
+	 * "17020000.venc" 设备名，of_platform_populate 时 sysfs 报 duplicate。
+	 * 该节点在本平台没有驱动绑定，改名只为让 bus id 唯一。 */
+	venc_legacy@17020000 {
 		compatible = "mediatek,venc";
 		reg = <0 0x17020000 0 0x10000>;
 		interrupts = <GIC_SPI 310 IRQ_TYPE_LEVEL_HIGH>;
