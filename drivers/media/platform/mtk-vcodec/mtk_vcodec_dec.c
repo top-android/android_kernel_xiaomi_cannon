@@ -2776,6 +2776,21 @@ static int mtk_vdec_s_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MPEG_MTK_LOG:
 		mtk_vcodec_set_log(ctx, ctrl->p_new.p_char);
 		break;
+	case V4L2_CID_MPEG_MTK_INTERLACING:
+	case V4L2_CID_MPEG_MTK_CODEC_TYPE:
+	case V4L2_CID_MPEG_MTK_FRAME_INTERVAL:
+	case V4L2_CID_MPEG_MTK_COLOR_DESC:
+	case V4L2_CID_MPEG_MTK_ASPECT_RATIO:
+	case V4L2_CID_MPEG_MTK_FIX_BUFFERS:
+	case V4L2_CID_MPEG_MTK_FIX_BUFFERS_SVP:
+		/*
+		 * cannon: query-only controls - they are only implemented in
+		 * mtk_vdec_g_volatile_ctrl(). MTK's c2 HAL issues a set before
+		 * get; rejecting the set makes the HAL close and reopen the
+		 * decoder in an endless loop. Accept and ignore, the real
+		 * values are reported through the get path.
+		 */
+		break;
 	default:
 		mtk_v4l2_err("ctrl-id=%x not support!", ctrl->id);
 		return -EINVAL;
