@@ -534,6 +534,15 @@ static int vidioc_venc_s_ctrl(struct v4l2_ctrl *ctrl)
 		p->dummynal = ctrl->val;
 		ctx->param_change |= MTK_ENCODE_PARAM_DUMMY_NAL;
 		break;
+	case V4L2_CID_MPEG_MTK_ENCODE_REFP_MAX_FRAME_NUM:
+	case V4L2_CID_MPEG_MTK_ENCODE_ROI_RC_QP:
+	case V4L2_CID_MPEG_MTK_RESOLUTION_CHANGE:
+		/*
+		 * cannon: query-only controls - only implemented in
+		 * vidioc_venc_g_volatile_ctrl(). Same c2 HAL pattern as the
+		 * decoder side: a rejected set resets the whole instance.
+		 */
+		break;
 	default:
 		mtk_v4l2_err("ctrl-id=%d not support!", ctrl->id);
 		ret = -EINVAL;
