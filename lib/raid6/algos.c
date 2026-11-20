@@ -121,7 +121,13 @@ const struct raid6_recov_calls *const raid6_recov_algos[] = {
 };
 
 #ifdef __KERNEL__
-#define RAID6_TIME_JIFFIES_LG2	4
+/*
+ * [cannon] 原值 4（每个算法测 16 jiffies）。16 个算法 gen/xor 各测一遍，
+ * 开机固定花 1.06s，实测在 initcall 里排第一。手机上不用 md raid，
+ * 这里只是为了挑最快实现；降到 2（4 jiffies = 16ms）足够区分
+ * 1000MB/s 和 3600MB/s，仍然能选出 neonx8。
+ */
+#define RAID6_TIME_JIFFIES_LG2	2
 #else
 /* Need more time to be stable in userspace */
 #define RAID6_TIME_JIFFIES_LG2	9
